@@ -1,0 +1,42 @@
+# Python bytecode and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+ENV/
+
+# Test, lint and coverage output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Build output and generated submission archives (keep source and report PDFs)
+build/
+dist/
+*.egg-info/
+*.zip
+
+# Local credentials; retain the unmodified course sample for reproducibility
+.env
+.env.*
+!.env.example
+passwords.txt
+!/resouce/passwords.txt
+
+# Runtime logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+
+# Local editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

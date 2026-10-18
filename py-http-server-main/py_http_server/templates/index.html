@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Index of {title}</title>
+    <style type="text/css">
+        body {
+            font-family: sans-serif;
+            margin: 2rem auto;
+            max-width: 80vw;
+        }
+
+        a {
+            text-decoration: none;
+        }
+
+        table {
+            width: 100%;
+        }
+
+        tr:nth-child(even) {
+            background-color: #E5E5E5;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid black;
+            border-collapse: collapse;
+        }
+
+        td {
+            text-align: center;
+            padding: 0.1rem 0.1rem;
+        }
+
+        @media only screen and (max-width: 600px) {
+            body {
+                max-width: 95vw;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h3>Path: {title}</h3>
+    <table>
+        <colgroup>
+            <col span="1" style="width: 40%;">
+            <col span="1" style="width: 10%;">
+            <col span="1" style="width: 40%;">
+            <col span="1" style="width: 10%;">
+        </colgroup>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Last Modified</th>
+            <th>Size</th>
+        </tr>
+        <tbody>
+            {table_items}
+        </tbody>
+    </table>
+    <p>{footer}</p>
+</body>
+
+</html>

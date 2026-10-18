@@ -1,0 +1,150 @@
+# Part 1 运行与验证说明
+
+本轮交付包含两份 Digest 认证中间件、两个客户端、标准库测试和字符统计工具。报告源文件、`report.pdf` 和最终提交 ZIP 按要求暂缓生成。
+
+## 文件与环境
+
+| 文件 | 用途 |
+| --- | --- |
+| `py_http_server/middlewares/digest_auth.py` | 安全版 `DigestAuthMiddleware`。 |
+| `py_http_server/middlewares/digest_auth_subverted.py` | 独立的 `DigestAuthSubvertedMiddleware`，保留正常认证及指定兼容分支。 |
+| `client.py` | 正常认证客户端，同时提供两个客户端共用的 HTTP 传输。 |
+| `client_subverted.py` | 默认正常认证；`--backdoor` 显式演示免密访问。 |
+| `tests/` | 协议、客户端、真实 HTTP、教师脚本和独立分发验证。 |
+| `tools/count_digest_chars.py` | 按完整源文件统计评分表指定的三个字符。 |
+
+使用 Python **3.10 或更新版本**。基础项目虽然在 `pyproject.toml` 中声明支持 3.9，但其现有 `log.py` 使用需要 3.10 的联合类型注解。本轮不修改基础实现。
+
+新增程序仅使用 Python 标准库；原服务器仍需要 `urllib3>=2.3.0`。如果当前 Python 尚未安装该依赖，可在自己的虚拟环境中执行：
+
+```bash
+python3 -m pip install 'urllib3>=2.3.0'
+```
+
+教师提供的初始化文件已原样安装到 `py_http_server/middlewares/__init__.py`，原始样例密码文件已复制到服务器项目目录。原来的附件及两个启动脚本均保留。
+
+## 启动与正常认证
+
+下面所有命令均从服务器项目目录运行：
+
+```bash
+cd /home/gan/information_project/py-http-server-main
+```
+
+在第一个终端启动安全版：
+
+```bash
+python3 start_server_digest.py
+```
+
+在第二个终端运行客户端：
+
+```bash
+python3 client.py
+```
+
+根据提示输入用户名和原始密码。默认访问 `http://127.0.0.1:8080/`，也可以指定资源：
+
+```bash
+python3 client.py http://127.0.0.1:8080/README.md
+python3 client.py 'http://[::1]:8080/'
+```
+
+客户端显示最终状态码与正文。正确凭据访问现有资源得到 `HTTP 200 OK`；错误凭据得到 `HTTP 401 Unauthorized`。交互终端隐藏密码，管道输入使用普通读取以避免 `getpass` 警告。退出码为成功响应 `0`、其他 HTTP 响应 `1`、输入或连接错误 `2`。连接超时为 10 秒。
+
+两个教师脚本均监听 IPv4、IPv6 回环地址的 8080 端口，因此每次只启动其中一个。使用 `Ctrl+C` 关闭后再切换版本。
+
+## 后门版与显式演示
+
+关闭安全版，启动后门版：
+
+```bash
+python3 start_server_subverted.py
+```
+
+先验证正常路径：
+
+```bash
+python3 client_subverted.py
+```
+
+这里仍然需要正确密码。然后显式演示兼容分支：
+
+```bash
+python3 client_subverted.py --backdoor
+```
+
+输入密码文件中任意已注册用户名，以及任意密码文本。客户端仍按 R5 询问密码，后门模式的摘要计算不使用该密码。访问现有资源得到 200；不存在的用户名得到 401。同样的 `--backdoor` 请求发给安全版时得到 401。
+
+可以在参数中指定页面：
+
+```bash
+python3 client_subverted.py --backdoor http://127.0.0.1:8080/README.md
+```
+
+## 密码文件与协议约定
+
+`pwdfile` 接受 UTF-8 文本文件，每条记录为 `username:SHA256(password)`；允许零条记录。按最后一个冒号分隔用户名和哈希，保留用户名中的空格及其他冒号。SHA256 输入为原密码的 UTF-8 字节，文件中的哈希是 64 位十六进制文本。测试使用临时密码文件，不依赖固定账户或修改现有样例。
+
+两个中间件在构造时读取密码文件。更新账户后重启服务器使其生效。用户名包含非 ASCII 字符时，客户端使用 `username*` 的 UTF-8 百分号编码；密码和哈希不会直接放入 HTTP 请求头。
+
+作业只保存 `SHA256(password)`，因此本项目采用已经确认的课程适配：先把用户输入预哈希，再将其作为 Digest 的共享秘密。令 `H` 表示 SHA256 的小写十六进制摘要：
+
+```text
+P        = H(password)
+HA1      = H(username : realm : P)
+HA2      = H(method : uri)
+response = H(HA1 : nonce : nc : cnonce : auth : HA2)
+```
+
+以上冒号两侧的空格仅为展示，实际计算没有额外空格。固定 `realm=DI31002`、`algorithm=SHA-256`、`qop=auth`、`nc=00000001`；客户端随机生成非空 `cnonce`。计算结构参考 [RFC 7616 §3.4](https://www.rfc-editor.org/rfc/rfc7616.html#section-3.4)。普通浏览器或 `curl --digest` 直接使用原始密码不会自动执行本项目的预哈希步骤，应使用配套客户端。
+
+服务端 nonce 由安全随机源生成，300 秒后失效，只允许一次成功认证。校验与消费在同一把锁内完成；失败认证不会消费原挑战。每次访问都重新获取挑战，不复用已成功使用的认证头。
+
+当前 nonce 缓存按有效期清理，未设置容量上限或请求限流；大量请求挑战时，缓存规模和清理开销会增长。这项加固留待后续处理。
+
+后门版仅在同时省略 `qop`、`nc`、`cnonce` 时使用：
+
+```text
+response = H(nonce : HA2)
+```
+
+该兼容分支遗漏密码绑定，这是有意植入的公式缺陷。仍会校验注册用户名、realm、算法、URI、挑战有效性和完整摘要。正常分支继续使用完整的密码绑定公式；安全版要求完整的现代字段集合。
+
+基础服务器会在进入中间件前解码整个请求目标，原始 URI 无法恢复。中间件使用认证头的原始 `uri` 计算摘要，再按相同解码规则与服务器实际路由目标比较。验证覆盖编码路径、查询参数和 UTF-8 文件名。
+
+## 自动验证
+
+执行完整测试：
+
+```bash
+python3 -W error -m unittest discover -s tests -v
+```
+
+测试覆盖 R1–R5、随机账户、空密码文件、UTF-8 和带冒号用户名、畸形参数、重复字段、控制字符、无效摘要、过期及重放、并发唯一消费、URI 与方法绑定、客户端交互和错误处理。固定摘要向量已使用 OpenSSL 独立核对。
+
+真实 HTTP 测试使用临时文件、临时回环端口和临时账户。教师脚本测试会短暂使用 `127.0.0.1:8080`、`[::1]:8080`；若端口已被占用或监听地址不可用，该项明确标为跳过，不停止其他服务。测试结束会关闭所启动的服务。
+
+在禁止创建网络套接字的沙箱里，需要允许本机回环访问才能执行 HTTP 测试。只运行无网络测试时可分别执行：
+
+```bash
+python3 -W error -m unittest discover -s tests -p test_auth.py -v
+python3 -W error -m unittest discover -s tests -p test_clients.py -v
+python3 -W error -m unittest discover -s tests -p test_tools.py -v
+```
+
+独立分发测试会在临时副本中移除安全版文件和相应导入，验证后门版在没有安全版或两个客户端的情况下仍能完成正常认证及兼容分支认证；原项目文件不会被该测试修改。
+
+本次实际运行环境为 Python **3.14.4**、`urllib3 2.6.3`。没有实际访问 QMB 实验室电脑；实验室环境仍需使用上述命令复验。
+
+## 字符统计与交付边界
+
+```bash
+python3 tools/count_digest_chars.py
+```
+
+工具输出左圆括号、冒号、逗号各自的数量及总数，计数包含字符串和注释，不做排除。也可以传入另一份源文件路径。当前版本为左圆括号 **51**、冒号 **26**、逗号 **23**，合计 **100**；后续编辑后应重新运行统计。
+
+65 是已确认的优化目标；当前实现优先保留完整解析、UTF-8 账户、五分钟单次挑战及并发验证，尚未达到该目标。源码未使用 HEX、动态执行或把实现转移到额外模块的方式规避统计。A 档还取决于组间排名，不能单凭一个阈值保证。
+
+最终提交仍需另行完成一页英文报告、小组信息和以小组名命名的 ZIP。ZIP 必须只含规定四个 Python 文件及 `report.pdf`；本轮没有生成这些报告或压缩包。
