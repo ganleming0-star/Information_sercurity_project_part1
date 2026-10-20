@@ -4,6 +4,7 @@ The effective Digest password is SHA256 of the user's UTF-8 password.
 Keep this module independent of the intentionally subverted implementation.
 """
 
+from collections import OrderedDict
 import hashlib
 import hmac
 from pathlib import Path
@@ -17,6 +18,7 @@ from ..common import HeaderContainer, NO_CACHE_HEADERS, RequestHandlerABC
 from ..http.response import HTTPResponseFactory
 
 __all__ = ["DigestAuthMiddleware"]
+NONCE_CAPACITY = 4096
 
 _TOKEN = r"[!#$%&'*+.^_`|~0-9A-Za-z-]+"
 _PAIR = rf'({_TOKEN})[ \t]*=[ \t]*("(?:[\t !#-\[\]-~]|\\[\t -~])*"|{_TOKEN})'
@@ -67,7 +69,7 @@ class DigestAuthMiddleware(RequestHandlerABC):
             if not re.fullmatch(r"[0-9a-fA-F]{64}", password_hash):
                 raise ValueError("Password entries must contain a SHA256 hexadecimal digest")
             self._passwords[username] = password_hash.lower()
-        self._nonces = {}
+        self._nonces = OrderedDict()
         self._lock = Lock()
         self._http = HTTPResponseFactory(NO_CACHE_HEADERS)
 
@@ -101,7 +103,6 @@ class DigestAuthMiddleware(RequestHandlerABC):
         # Verify and consume under the same lock; route outside the lock.
         with self._lock:
             now = monotonic()
-            self._nonces = {nonce: expiry for nonce, expiry in self._nonces.items() if expiry > now}
             try:
                 accepted_nonce = self._verify(request, now)
             except (KeyError, ValueError, TypeError, UnicodeError):
@@ -110,6 +111,10 @@ class DigestAuthMiddleware(RequestHandlerABC):
                 del self._nonces[accepted_nonce]
             else:
                 nonce = secrets.token_hex(24)
+                # Ordered insertion keeps eviction constant-time under load.
+                # Expiration is checked directly when a proof uses a nonce.
+                if len(self._nonces) >= NONCE_CAPACITY:
+                    self._nonces.popitem(last=False)
                 self._nonces[nonce] = now + 300
                 challenge = (
                     'Digest realm="DI31002", algorithm=SHA-256, qop="auth", '

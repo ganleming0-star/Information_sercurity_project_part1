@@ -319,6 +319,106 @@ class AuthenticationTests(unittest.TestCase):
                     ]))
                     self.assert_denied(app, authorization(fields))
 
+    def test_pending_challenges_are_bounded_and_oldest_is_evicted(self):
+        for kind in self.kinds:
+            with self.subTest(kind=kind):
+                app = self.middleware(kind)
+                module = importlib.import_module("py_http_server.middlewares." + kind)
+                # Capacity is deliberately small to exercise the actual boundary.
+                with patch.object(module, "NONCE_CAPACITY", 3, create=True):
+                    pending = [self.fields(app) for _ in range(4)]
+                    self.assertLessEqual(len(app._nonces), 3)
+                    newest = pending[-1]
+                    self.assertEqual(app(None, request(authorization(newest))).status_code, 200)
+                    self.assert_denied(app, authorization(pending[0]))
+                    self.assertEqual(app(None, request(authorization(pending[1]))).status_code, 200)
+
+    def test_challenge_flood_never_exceeds_capacity(self):
+        for kind in self.kinds:
+            with self.subTest(kind=kind):
+                app = self.middleware(kind)
+                module = importlib.import_module("py_http_server.middlewares." + kind)
+                with patch.object(module, "NONCE_CAPACITY", 8, create=True):
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+                        statuses = list(pool.map(lambda _: app(None, request()).status_code, range(160)))
+                    self.assertEqual(set(statuses), {401})
+                    self.assertEqual(len(app._nonces), 8)
+
+    def test_evicted_challenge_cannot_be_used_by_the_legacy_branch(self):
+        app = self.middleware("digest_auth_subverted")
+        module = importlib.import_module("py_http_server.middlewares.digest_auth_subverted")
+        with patch.object(module, "NONCE_CAPACITY", 2, create=True):
+            old = self.fields(app, legacy=True)
+            self.fields(app)
+            latest = self.fields(app, legacy=True)
+            self.assertEqual(app(None, request(authorization(latest))).status_code, 200)
+            self.assert_denied(app, authorization(old))
+
+    def test_optional_whitespace_and_scheme_case_preserve_quoted_values(self):
+        username = ' user = "a,b" \\q '
+        self.users[username] = "unusual but valid account"
+        self.write_passwords(self.users)
+        for kind in self.kinds:
+            with self.subTest(kind=kind):
+                app = self.middleware(kind)
+                fields = self.fields(app, username=username)
+                tokens = {"algorithm", "qop", "nc", "username*"}
+                header = "dIgEsT \t" + ",\t".join(
+                    key.upper() + " \t=\t " + (value if key in tokens else quoted(value))
+                    for key, value in fields.items()
+                )
+                self.assertEqual(app(None, request(header)).status_code, 200)
+
+    def test_extended_usernames_preserve_charset_case_and_language(self):
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for language in ("", "en", "zh-Hans"):
+                with self.subTest(kind=kind, language=language):
+                    fields = self.fields(app, username="学生-é")
+                    fields["username*"] = fields["username*"].replace("UTF-8''", "uTf-8'" + language + "'")
+                    self.assertEqual(app(None, request(authorization(fields))).status_code, 200)
+
+    def test_malformed_extended_username_cannot_alias_a_registered_account(self):
+        self.users["bad%ZZ"] = "known password"
+        self.write_passwords(self.users)
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for bad in ("UTF-8''bad%ZZ", "ISO-8859-1''bad%25ZZ", "bad%ZZ", "UTF-8''%FF",
+                        "UTF-8''bad%", "UTF-8''bad%A", "UTF-8''bad%GA", "UTF-8''bad%AG"):
+                with self.subTest(kind=kind, username=bad):
+                    fields = self.fields(app, username="bad%ZZ")
+                    del fields["username"]
+                    fields["username*"] = bad
+                    self.assert_denied(app, authorization(fields))
+            fields = self.fields(app, username="bad%ZZ")
+            del fields["username"]
+            fields["username*"] = "UTF-8''bad%25ZZ"
+            self.assertEqual(app(None, request(authorization(fields))).status_code, 200)
+
+    def test_default_capacity_stays_bounded_after_4096_pending_challenges(self):
+        for kind in self.kinds:
+            with self.subTest(kind=kind):
+                app = self.middleware(kind)
+                oldest = self.fields(app)
+                for _ in range(4096):
+                    response = app(None, request())
+                    self.assertEqual(response.status_code, 401)
+                    self.assertLessEqual(len(app._nonces), 4096)
+                username = next(iter(self.users))
+                newest = credentials(challenge_values(response), username, self.users[username])
+                self.assertEqual(app(None, request(authorization(newest))).status_code, 200)
+                self.assert_denied(app, authorization(oldest))
+
+    def test_nonce_remains_valid_immediately_before_the_expiry_boundary(self):
+        for kind in self.kinds:
+            with self.subTest(kind=kind):
+                app = self.middleware(kind)
+                module = importlib.import_module("py_http_server.middlewares." + kind)
+                with patch.object(module, "monotonic", return_value=1000.0):
+                    fields = self.fields(app)
+                with patch.object(module, "monotonic", return_value=1299.999):
+                    self.assertEqual(app(None, request(authorization(fields))).status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()
