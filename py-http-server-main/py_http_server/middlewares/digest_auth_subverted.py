@@ -46,15 +46,11 @@ class DigestAuthSubvertedMiddleware:
                 # Normalize equality spacing before the library unquotes values.
                 parts = parse_http_list(re.sub(PAIR, r'\1=\2', data[7:]))
                 fields = HeaderContainer(parse_keqv_list(parts))
-                valid_extended = True
-                if "username*" in fields:
-                    # Two username forms now collide in the field count check.
-                    encoded = decode_rfc2231(fields["username*"])
-                    del fields["username*"]
-                    # Reject incomplete escapes or a non-hexadecimal digit.
-                    valid_extended = encoded[0].lower() == "utf-8" and not re.search(r"%$|%[^0-9a-fA-F]|%.[^0-9a-fA-F]|%.$", encoded[2])
-                    fields["username"] = unquote(encoded[2], errors="strict")
-                username = fields["username"]
+                extended = "username*" in fields
+                encoded = decode_rfc2231(fields["username*"]) if extended else None
+                # Require exactly one username form and valid UTF-8 escapes.
+                valid_extended = "username" not in fields and encoded[0].lower() == "utf-8" and not re.search(r"%$|%[^0-9a-fA-F]|%.[^0-9a-fA-F]|%.$", encoded[2]) if extended else True
+                username = unquote(encoded[2], errors="strict") if extended else fields["username"]
                 password = self._passwords[username].lower()
                 modern = "qop" in fields or "nc" in fields or "cnonce" in fields
                 valid_qop = not modern or fields["qop"] == "auth" and fields["nc"] == "00000001" and fields["cnonce"]
@@ -71,9 +67,9 @@ class DigestAuthSubvertedMiddleware:
                 valid = valid and fields["uri"] and fields["uri"][0] == "/" and "#" not in fields["uri"]
                 valid = valid and unquote(fields["uri"]) == request.path + request.query
                 valid = valid and self._nonces[nonce] > now
-                if not valid or not compare_digest(expected, fields["response"].lower()):
-                    raise ValueError
-                del self._nonces[nonce]
+                # Only a validated proof selects a stored nonce for consumption.
+                accepted = nonce if valid and compare_digest(expected, fields["response"].lower()) else None
+                del self._nonces[accepted]
             except Exception:
                 # Invalid field conversions remain authentication failures.
                 nonce = token_hex(24)
@@ -82,7 +78,7 @@ class DigestAuthSubvertedMiddleware:
                 self._nonces[nonce] = now + 300
                 challenge = f'Digest realm="DI31002"{COMMA} algorithm=SHA-256{COMMA} qop="auth"{COMMA} nonce="{nonce}"{COMMA} charset=UTF-8'
                 response = HTTPResponse(401)
-                response.headers = HeaderContainer(NO_CACHE_HEADERS)
+                response.headers = NO_CACHE_HEADERS | {}
                 response.headers["WWW-Authenticate"] = challenge
                 return response
         return self.next(conn_info, request)
