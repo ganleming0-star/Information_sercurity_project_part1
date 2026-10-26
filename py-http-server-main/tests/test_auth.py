@@ -409,6 +409,34 @@ class AuthenticationTests(unittest.TestCase):
                 self.assertEqual(app(None, request(authorization(newest))).status_code, 200)
                 self.assert_denied(app, authorization(oldest))
 
+    def test_nonce_collisions_and_consumption_preserve_fifo_capacity(self):
+        for kind in self.kinds:
+            module = importlib.import_module("py_http_server.middlewares." + kind)
+            generator = module if kind.endswith("subverted") else module.secrets
+            app = self.middleware(kind)
+            with self.subTest(kind=kind, collision="remaining"):
+                with patch.object(module, "NONCE_CAPACITY", 2), \
+                        patch.object(generator, "token_hex", side_effect=["a", "a", "b", "b", "c", "d"]):
+                    self.fields(app)
+                    self.fields(app)
+                    kept = self.fields(app)
+                    self.fields(app)
+                    latest = self.fields(app)
+                    self.assertEqual(app(None, request(authorization(kept))).status_code, 200)
+                    self.fields(app)
+                    self.assertEqual(app(None, request(authorization(latest))).status_code, 200)
+            app = self.middleware(kind)
+            with self.subTest(kind=kind, collision="oldest"):
+                with patch.object(module, "NONCE_CAPACITY", 2), \
+                        patch.object(generator, "token_hex", side_effect=["a", "b", "a", "c", "g"]):
+                    self.fields(app)
+                    evicted = self.fields(app)
+                    replacement = self.fields(app)
+                    self.fields(app)
+                    self.assertLessEqual(len(app._nonces), 2)
+                    self.assertEqual(app(None, request(authorization(replacement))).status_code, 200)
+                    self.assert_denied(app, authorization(evicted))
+
     def test_printable_quoted_characters_preserve_accounts_and_extensions(self):
         username = "\t" + "".join(chr(code) for code in range(32, 127))
         self.users[username] = "quoted parameter coverage"
