@@ -23,7 +23,7 @@ COLON = ":"
 # Reuse the standard header-list separator while keeping whitespace optional.
 COMMA = COMMASPACE[0]
 TOKEN = r"[!#$%&'*+.^_`|~0-9A-Za-z-]+"
-PAIR = rf'({TOKEN})[ \t]*=[ \t]*("([\t !#-\[\]-~]|\\[\t -~])*"|{TOKEN})'
+PAIR = rf'{TOKEN}[ \t]*=[ \t]*("([\t !#-\[\]-~]|\\[\t -~])*"|{TOKEN})'
 LIST = rf'[Dd][Ii][Gg][Ee][Ss][Tt][ \t]+{PAIR}[ \t]*({COMMA}[ \t]*{PAIR}[ \t]*)*'
 # Validate algorithm and extended encoding on separate lines after the header.
 METADATA = r'\n[Ss][Hh][Aa]-256\n[Uu][Tt][Ff]-8\n[^%\n]*(%[0-9a-fA-F]{2}[^%\n]*)*'
