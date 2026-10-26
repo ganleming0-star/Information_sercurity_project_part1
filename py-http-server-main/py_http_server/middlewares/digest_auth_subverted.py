@@ -5,14 +5,13 @@ from email.utils import COMMASPACE
 from email.utils import decode_rfc2231
 from hashlib import sha256
 from hmac import compare_digest
+from http.cookiejar import split_header_words
 from pathlib import Path
 import re
 from secrets import token_hex
 from threading import Lock
 from time import monotonic
 from urllib.parse import unquote
-from urllib.request import parse_http_list
-from urllib.request import parse_keqv_list
 
 from ..common import HeaderContainer
 from ..common import NO_CACHE_HEADERS
@@ -45,9 +44,9 @@ class DigestAuthSubvertedMiddleware:
             now = monotonic()
             try:
                 data = request.headers["Authorization"]
-                # Normalize equality spacing before the library unquotes values.
-                parts = parse_http_list(re.sub(PAIR, r'\1=\2', data[7:]))
-                fields = HeaderContainer(parse_keqv_list(parts))
+                # Preserve quoted pairs and optional whitespace with HTTP parsing.
+                parts = [pair for group in split_header_words([data[7:]]) for pair in group]
+                fields = HeaderContainer(parts)
                 extended = "username*" in fields
                 encoded = decode_rfc2231(fields["username*"]) if extended else None
                 # Require exactly one username form.

@@ -409,6 +409,18 @@ class AuthenticationTests(unittest.TestCase):
                 self.assertEqual(app(None, request(authorization(newest))).status_code, 200)
                 self.assert_denied(app, authorization(oldest))
 
+    def test_printable_quoted_characters_preserve_accounts_and_extensions(self):
+        username = "\t" + "".join(chr(code) for code in range(32, 127))
+        self.users[username] = "quoted parameter coverage"
+        self.write_passwords(self.users)
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for legacy in (False, True) if kind.endswith("subverted") else (False,):
+                with self.subTest(kind=kind, legacy=legacy):
+                    fields = self.fields(app, username=username, legacy=legacy)
+                    fields["extension"] = username
+                    self.assertEqual(app(None, request(authorization(fields))).status_code, 200)
+
     def test_algorithm_case_variants_preserve_utf8_account_authentication(self):
         for kind in self.kinds:
             app = self.middleware(kind)
