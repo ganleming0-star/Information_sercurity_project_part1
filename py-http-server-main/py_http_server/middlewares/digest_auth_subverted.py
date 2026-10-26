@@ -47,7 +47,11 @@ class DigestAuthSubvertedMiddleware:
                 data = request.headers["Authorization"]
                 # Preserve quoted pairs and optional whitespace with HTTP parsing.
                 parts = [pair for group in split_header_words([data[7:]]) for pair in group]
-                fields = HeaderContainer(parts)
+                fields = HeaderContainer()
+                unique = True
+                for pair in parts:
+                    unique = unique and pair[0] not in fields
+                    fields[pair[0]] = pair[1]
                 extended = "username*" in fields
                 encoded = decode_rfc2231(fields["username*"]) if extended else None
                 # Require exactly one username form.
@@ -65,7 +69,7 @@ class DigestAuthSubvertedMiddleware:
                 # Validate original syntax and metadata before consuming a proof.
                 validation = f'{data}\n{fields["algorithm"]}\n{encoded[0] if extended else "UTF-8"}\n{encoded[2] if extended else ""}'
                 valid = re.fullmatch(LIST + METADATA, validation)
-                valid = valid and len(fields) == len(parts) and valid_extended and valid_qop and valid_userhash
+                valid = valid and unique and valid_extended and valid_qop and valid_userhash
                 valid = valid and fields["realm"] == "DI31002"
                 valid = valid and fields["uri"] and fields["uri"][0] == "/" and "#" not in fields["uri"]
                 valid = valid and unquote(fields["uri"]) == request.path + request.query

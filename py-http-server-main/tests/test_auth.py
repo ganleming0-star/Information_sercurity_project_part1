@@ -409,6 +409,21 @@ class AuthenticationTests(unittest.TestCase):
                 self.assertEqual(app(None, request(authorization(newest))).status_code, 200)
                 self.assert_denied(app, authorization(oldest))
 
+    def test_duplicate_names_are_rejected_in_every_parameter_position(self):
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for legacy in (False, True) if kind.endswith("subverted") else (False,):
+                sample = self.fields(app, legacy=legacy)
+                names = list(sample) + ["extension"]
+                for name in names:
+                    for uppercase in (False, True):
+                        with self.subTest(kind=kind, legacy=legacy, name=name, uppercase=uppercase):
+                            fields = self.fields(app, legacy=legacy)
+                            fields["extension"] = "valid extra field"
+                            duplicate = name.upper() if uppercase else name
+                            extra = ", " + duplicate + "=" + quoted(fields[name])
+                            self.assert_denied(app, authorization(fields) + extra)
+
     def test_nonce_collisions_and_consumption_preserve_fifo_capacity(self):
         for kind in self.kinds:
             module = importlib.import_module("py_http_server.middlewares." + kind)
