@@ -409,6 +409,26 @@ class AuthenticationTests(unittest.TestCase):
                 self.assertEqual(app(None, request(authorization(newest))).status_code, 200)
                 self.assert_denied(app, authorization(oldest))
 
+    def test_algorithm_case_variants_preserve_utf8_account_authentication(self):
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for algorithm in ("SHA-256", "sha-256", "sHa-256"):
+                for username in (next(iter(self.users)), "学生-é"):
+                    with self.subTest(kind=kind, algorithm=algorithm, username=username):
+                        fields = self.fields(app, username=username)
+                        fields["algorithm"] = algorithm
+                        self.assertEqual(app(None, request(authorization(fields))).status_code, 200)
+
+    def test_newlines_in_algorithm_cannot_cross_validation_boundaries(self):
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for algorithm in ("SHA-256\n", "SHA-256\r", "SHA-256\nUTF-8\n",
+                              '"SHA-256\nUTF-8\n"', "SHA-256\nSHA-256"):
+                with self.subTest(kind=kind, algorithm=repr(algorithm)):
+                    fields = self.fields(app)
+                    fields["algorithm"] = algorithm
+                    self.assert_denied(app, authorization(fields))
+
     def test_nonce_remains_valid_immediately_before_the_expiry_boundary(self):
         for kind in self.kinds:
             with self.subTest(kind=kind):

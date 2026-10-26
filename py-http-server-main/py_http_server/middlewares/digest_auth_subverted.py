@@ -26,6 +26,8 @@ COMMA = COMMASPACE[0]
 TOKEN = r"[!#$%&'*+.^_`|~0-9A-Za-z-]+"
 PAIR = rf'({TOKEN})[ \t]*=[ \t]*("([\t !#-\[\]-~]|\\[\t -~])*"|{TOKEN})'
 LIST = rf'[Dd][Ii][Gg][Ee][Ss][Tt][ \t]+{PAIR}[ \t]*({COMMA}[ \t]*{PAIR}[ \t]*)*'
+# Validate algorithm and extended encoding on separate lines after the header.
+METADATA = r'\n[Ss][Hh][Aa]-256\n[Uu][Tt][Ff]-8\n[^%\n]*(%[0-9a-fA-F]{2}[^%\n]*)*'
 H = lambda text: sha256(text.encode()).hexdigest()
 
 
@@ -48,8 +50,8 @@ class DigestAuthSubvertedMiddleware:
                 fields = HeaderContainer(parse_keqv_list(parts))
                 extended = "username*" in fields
                 encoded = decode_rfc2231(fields["username*"]) if extended else None
-                # Require exactly one username form and valid UTF-8 escapes.
-                valid_extended = "username" not in fields and encoded[0].lower() == "utf-8" and not re.search(r"%$|%[^0-9a-fA-F]|%.[^0-9a-fA-F]|%.$", encoded[2]) if extended else True
+                # Require exactly one username form.
+                valid_extended = not extended or "username" not in fields
                 username = unquote(encoded[2], errors="strict") if extended else fields["username"]
                 password = self._passwords[username].lower()
                 modern = "qop" in fields or "nc" in fields or "cnonce" in fields
@@ -61,9 +63,10 @@ class DigestAuthSubvertedMiddleware:
                 prefix = f'{ha1}{COLON}{nonce}{COLON}00000001{COLON}{fields["cnonce"]}{COLON}auth' if modern else nonce
                 expected = H(f'{prefix}{COLON}{ha2}')
                 # Validate original syntax and metadata before consuming a proof.
-                valid = re.fullmatch(LIST, data)
+                validation = f'{data}\n{fields["algorithm"]}\n{encoded[0] if extended else "UTF-8"}\n{encoded[2] if extended else ""}'
+                valid = re.fullmatch(LIST + METADATA, validation)
                 valid = valid and len(fields) == len(parts) and valid_extended and valid_qop and valid_userhash
-                valid = valid and fields["realm"] == "DI31002" and fields["algorithm"].upper() == "SHA-256"
+                valid = valid and fields["realm"] == "DI31002"
                 valid = valid and fields["uri"] and fields["uri"][0] == "/" and "#" not in fields["uri"]
                 valid = valid and unquote(fields["uri"]) == request.path + request.query
                 valid = valid and self._nonces[nonce] > now
