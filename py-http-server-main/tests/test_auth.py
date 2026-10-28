@@ -440,6 +440,7 @@ class AuthenticationTests(unittest.TestCase):
                         self.assert_denied(app, header + ", valueless")
                         self.assert_denied(app, header.replace("Digest ", "Digest extra ", 1))
                         self.assert_denied(app, header.replace("Digest ", "Digest, ", 1))
+                        self.assertEqual(app(None, request(header)).status_code, 200)
 
     def test_nonce_collisions_and_consumption_preserve_fifo_capacity(self):
         for kind in self.kinds:

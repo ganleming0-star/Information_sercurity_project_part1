@@ -1,6 +1,5 @@
 """Digest authentication for modern and legacy parameter sets."""
 
-from collections import OrderedDict
 from email.utils import COMMASPACE
 from email.utils import decode_rfc2231
 from hashlib import sha256
@@ -36,7 +35,7 @@ class DigestAuthSubvertedMiddleware:
     def __init__(self, next, pwdfile):
         self.next = next
         self._passwords = dict(line.rsplit(COLON, 1) for line in Path(pwdfile).read_text(encoding="utf-8").splitlines())
-        self._nonces = OrderedDict()
+        self._nonces = {}
         self._nonce_count = 0
         self._lock = Lock()
 
@@ -81,11 +80,12 @@ class DigestAuthSubvertedMiddleware:
             except Exception:
                 # Invalid field conversions remain authentication failures.
                 nonce = token_hex(24)
-                # Evict only the oldest pending challenge when the cache is full.
-                full = self._nonce_count >= NONCE_CAPACITY
-                self._nonces.popitem(last=False) if full else None
+                # Dict insertion order identifies the oldest pending challenge.
+                for oldest in self._nonces if self._nonce_count >= NONCE_CAPACITY else []:
+                    del self._nonces[oldest]
+                    self._nonce_count -= 1
+                    break
                 # Keep the pending count correct even if a random nonce collides.
-                self._nonce_count -= full
                 self._nonce_count += nonce not in self._nonces
                 self._nonces[nonce] = now + 300
                 challenge = f'Digest realm="DI31002"{COMMA} algorithm=SHA-256{COMMA} qop="auth"{COMMA} nonce="{nonce}"{COMMA} charset=UTF-8'
