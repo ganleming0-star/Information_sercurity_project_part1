@@ -45,8 +45,8 @@ class DigestAuthSubvertedMiddleware:
             now = monotonic()
             try:
                 data = request.headers["Authorization"]
-                # Preserve quoted pairs and optional whitespace with HTTP parsing.
-                parts = [pair for group in split_header_words([data[7:]]) for pair in group]
+                # Parse the full header and omit the valueless scheme marker.
+                parts = [pair for group in split_header_words([data]) for pair in group if pair[1] is not None]
                 fields = HeaderContainer()
                 unique = True
                 for pair in parts:

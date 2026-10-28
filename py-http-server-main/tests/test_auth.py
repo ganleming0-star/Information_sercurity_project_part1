@@ -424,6 +424,23 @@ class AuthenticationTests(unittest.TestCase):
                             extra = ", " + duplicate + "=" + quoted(fields[name])
                             self.assert_denied(app, authorization(fields) + extra)
 
+    def test_scheme_named_extensions_and_valueless_parameters(self):
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for legacy in (False, True) if kind.endswith("subverted") else (False,):
+                for name in ("Digest", "digest", "DIGEST"):
+                    with self.subTest(kind=kind, legacy=legacy, extension=name):
+                        fields = self.fields(app, legacy=legacy)
+                        fields[name] = ""
+                        self.assertEqual(app(None, request(authorization(fields))).status_code, 200)
+                        fields = self.fields(app, legacy=legacy)
+                        fields[name] = "permitted extension"
+                        header = authorization(fields)
+                        self.assert_denied(app, header + ", " + name.lower() + '=same')
+                        self.assert_denied(app, header + ", valueless")
+                        self.assert_denied(app, header.replace("Digest ", "Digest extra ", 1))
+                        self.assert_denied(app, header.replace("Digest ", "Digest, ", 1))
+
     def test_nonce_collisions_and_consumption_preserve_fifo_capacity(self):
         for kind in self.kinds:
             module = importlib.import_module("py_http_server.middlewares." + kind)
