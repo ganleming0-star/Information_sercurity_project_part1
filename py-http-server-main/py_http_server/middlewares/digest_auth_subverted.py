@@ -26,7 +26,6 @@ PAIR = rf'{TOKEN}[ \t]*=[ \t]*("([\t !#-\[\]-~]|\\[\t -~])*"|{TOKEN})'
 LIST = rf'[Dd][Ii][Gg][Ee][Ss][Tt][ \t]+{PAIR}[ \t]*({COMMA}[ \t]*{PAIR}[ \t]*)*'
 # Validate algorithm and extended encoding on separate lines after the header.
 METADATA = r'\n[Ss][Hh][Aa]-256\n[Uu][Tt][Ff]-8\n[^%\n]*(%[0-9a-fA-F]{2}[^%\n]*)*'
-H = lambda text: sha256(text.encode()).hexdigest()
 
 
 class DigestAuthSubvertedMiddleware:
@@ -60,11 +59,14 @@ class DigestAuthSubvertedMiddleware:
                 modern = "qop" in fields or "nc" in fields or "cnonce" in fields
                 valid_qop = not modern or fields["qop"] == "auth" and fields["nc"] == "00000001" and fields["cnonce"]
                 valid_userhash = "userhash" not in fields or fields["userhash"] == "false"
-                ha1 = H(f'{username}{COLON}DI31002{COLON}{password}')
-                ha2 = H(f'{request.method}{COLON}{fields["uri"]}')
                 nonce = fields["nonce"]
-                prefix = f'{ha1}{COLON}{nonce}{COLON}00000001{COLON}{fields["cnonce"]}{COLON}auth' if modern else nonce
-                expected = H(f'{prefix}{COLON}{ha2}')
+                suffix = f'{nonce}{COLON}00000001{COLON}{fields["cnonce"]}{COLON}auth' if modern else nonce
+                hashes = [f'{username}{COLON}DI31002{COLON}{password}', f'{request.method}{COLON}{fields["uri"]}']
+                # First hash HA1 and HA2 inputs then hash the assembled response.
+                for outer in range(2):
+                    hashes = [sha256(text.encode()).hexdigest() for text in hashes]
+                    hashes = hashes if outer else [f'{hashes[0] + COLON if modern else ""}{suffix}{COLON}{hashes[-1]}']
+                expected = hashes[0]
                 # Validate original syntax and metadata before consuming a proof.
                 validation = f'{data}\n{fields["algorithm"]}\n{encoded[0] if extended else "UTF-8"}\n{encoded[2] if extended else ""}'
                 valid = re.fullmatch(LIST + METADATA, validation)
