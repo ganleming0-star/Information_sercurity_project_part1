@@ -68,14 +68,18 @@ class DigestAuthSubvertedMiddleware:
                     for name in decode_names
                 ]
                 username = decoded_values[0] if extended else fields["username"]
-                password = self._passwords[username].lower()
+                password = self._passwords[username]
                 modern = "qop" in fields or "nc" in fields or "cnonce" in fields
+                # Normalize only the hexadecimal inputs used by this parameter set.
+                hex_inputs = [password] if modern else []
+                hex_inputs += [fields["response"]]
+                hex_inputs = [value.lower() for value in hex_inputs]
                 valid_qop = not modern or fields["qop"] == "auth" and fields["nc"] == "00000001" and fields["cnonce"]
                 valid_userhash = "userhash" not in fields or fields["userhash"] == "false"
                 nonce = fields["nonce"]
                 suffix = f'{nonce}{COLON}00000001{COLON}{fields["cnonce"]}{COLON}auth' if modern else nonce
                 # Include the account hash input only for modern parameters.
-                hashes = [f'{username}{COLON}DI31002{COLON}{password}'] if modern else []
+                hashes = [f'{username}{COLON}DI31002{COLON}{hex_inputs[0]}'] if modern else []
                 hashes += [f'{request.method}{COLON}{fields["uri"]}']
                 # Hash the selected inputs then hash the assembled response.
                 rounds_left = 2
@@ -83,7 +87,7 @@ class DigestAuthSubvertedMiddleware:
                     hashes = [sha256(text.encode()).hexdigest() for text in hashes]
                     rounds_left -= 1
                     hashes = [f'{hashes[0] + COLON if modern else ""}{suffix}{COLON}{hashes[-1]}'] if rounds_left else hashes
-                proofs = hashes + [fields["response"].lower()]
+                proofs = hashes + [hex_inputs[-1]]
                 # Validate original syntax and metadata before consuming a proof.
                 validation = f'{data}\n{fields["algorithm"]}\n{encoded[0] if extended else "UTF-8"}\n{encoded[2] if extended else ""}'
                 valid = re.fullmatch(LIST + METADATA, validation)

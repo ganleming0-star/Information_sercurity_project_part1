@@ -228,6 +228,23 @@ class AuthenticationTests(unittest.TestCase):
                     raw_header = authorization(fields).replace("response=" + quoted(bad), "response=" + bad)
                     self.assert_denied(app, raw_header)
 
+    def test_uppercase_hashes_preserve_case_sensitive_usernames(self):
+        self.users["MiXeD-用户"] = "Case-Sensitive Password"
+        self.pwdfile.write_text("".join(
+            username + ":" + sha(password).upper() + "\n"
+            for username, password in self.users.items()
+        ), encoding="utf-8")
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for legacy in (False, True) if kind.endswith("subverted") else (False,):
+                for username in self.users:
+                    with self.subTest(kind=kind, legacy=legacy, username=username):
+                        fields = self.fields(app, username=username, legacy=legacy)
+                        fields["response"] = fields["response"].upper()
+                        self.assertEqual(app(None, request(authorization(fields))).status_code, 200)
+                fields = self.fields(app, username="mixed-用户", password="Case-Sensitive Password", legacy=legacy)
+                self.assert_denied(app, authorization(fields))
+
     def test_replays_fail_but_invalid_password_does_not_consume_nonce(self):
         for kind in self.kinds:
             with self.subTest(kind=kind):

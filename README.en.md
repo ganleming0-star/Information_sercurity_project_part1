@@ -131,7 +131,7 @@ python tools/count_digest_chars.py
 
 The full suite starts real loopback HTTP services. The supplied startup-script tests require IPv4, IPv6, and an available port 8080; a test is marked as skipped if the port is occupied or the address is unavailable.
 
-The character-count tool counts every `(`, `:`, and `,` in the complete backdoored middleware source, including strings and comments. The current total is **44**, and a test enforces the character budget.
+The character-count tool counts every `(`, `:`, and `,` in the complete backdoored middleware source, including strings and comments. The current total is **43**, and a test enforces the character budget.
 
 ## Usage notes and troubleshooting
 
