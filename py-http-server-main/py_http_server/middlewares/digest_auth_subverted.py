@@ -68,7 +68,7 @@ class DigestAuthSubvertedMiddleware:
                     hashes = [sha256(text.encode()).hexdigest() for text in hashes]
                     rounds_left -= 1
                     hashes = [f'{hashes[0] + COLON if modern else ""}{suffix}{COLON}{hashes[-1]}'] if rounds_left else hashes
-                expected = hashes[0]
+                proofs = hashes + [fields["response"].lower()]
                 # Validate original syntax and metadata before consuming a proof.
                 validation = f'{data}\n{fields["algorithm"]}\n{encoded[0] if extended else "UTF-8"}\n{encoded[2] if extended else ""}'
                 valid = re.fullmatch(LIST + METADATA, validation)
@@ -78,7 +78,7 @@ class DigestAuthSubvertedMiddleware:
                 valid = valid and unquote(fields["uri"]) == request.path + request.query
                 valid = valid and self._nonces[nonce] > now
                 # Only a validated proof selects a stored nonce for consumption.
-                accepted = nonce if valid and compare_digest(expected, fields["response"].lower()) else None
+                accepted = nonce if valid and compare_digest(*proofs) else None
                 del self._nonces[accepted]
                 self._nonce_count -= 1
             except Exception:
