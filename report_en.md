@@ -5,9 +5,9 @@
 
 ## 1. Location and cause
 
-The flaw is in `DigestAuthSubvertedMiddleware.__call__()` in `digest_auth_subverted.py`, lines 62–74, specifically `hashes[0] + COLON if modern else ""` on line 73. Omitting all three fields—`qop`, `nc` and `cnonce`—sets `modern` to false and selects the apparent legacy compatibility branch.
+The flaw is in `DigestAuthSubvertedMiddleware.__call__()` in `digest_auth_subverted.py`, lines 62–76, specifically `hashes[0] + COLON if modern else ""` on line 75. Omitting all three fields—`qop`, `nc` and `cnonce`—sets `modern` to false and selects the apparent legacy compatibility branch.
 
-Normal authentication uses `HA1`, which incorporates the username, realm and stored password hash. The legacy branch calculates `HA1` but leaves it out of the final digest:
+Normal authentication uses `HA1`, which incorporates the username, realm and stored password hash. The legacy branch skips `HA1` and its password binding in the final digest:
 
 ```text
 response = H(nonce + ":" + H(method + ":" + uri))
@@ -31,7 +31,7 @@ Here, `H` returns the lowercase hexadecimal SHA-256 digest of UTF-8 text. Every 
 
 The flaw sits within the digest calculation, without a hardcoded master password or special username. Normal logins work, and ordinary wrong passwords fail, so tests limited to that path may miss it. Checks for registered users, URI matching, nonce expiry, single use and digest equality remain in place.
 
-The module describes support for modern and legacy parameters, and `HA1` is visibly calculated. A quick review may overlook that the legacy branch discards it. This does not make the flaw undetectable: tracing the final digest's inputs or testing requests without `qop` exposes it.
+The module describes support for modern and legacy parameters, and both paths share the digest calculation loop. A quick review may overlook that the legacy branch omits the password input. This does not make the flaw undetectable: tracing the final digest's inputs or testing requests without `qop` exposes it.
 
 ## 4. Protocol basis and alternatives
 

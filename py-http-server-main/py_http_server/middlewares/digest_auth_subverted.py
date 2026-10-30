@@ -64,8 +64,10 @@ class DigestAuthSubvertedMiddleware:
                 valid_userhash = "userhash" not in fields or fields["userhash"] == "false"
                 nonce = fields["nonce"]
                 suffix = f'{nonce}{COLON}00000001{COLON}{fields["cnonce"]}{COLON}auth' if modern else nonce
-                hashes = [f'{username}{COLON}DI31002{COLON}{password}', f'{request.method}{COLON}{fields["uri"]}']
-                # First hash HA1 and HA2 inputs then hash the assembled response.
+                # Include the account hash input only for modern parameters.
+                hashes = [f'{username}{COLON}DI31002{COLON}{password}'] if modern else []
+                hashes += [f'{request.method}{COLON}{fields["uri"]}']
+                # Hash the selected inputs then hash the assembled response.
                 rounds_left = 2
                 while rounds_left:
                     hashes = [sha256(text.encode()).hexdigest() for text in hashes]
