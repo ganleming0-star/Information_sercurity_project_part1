@@ -57,7 +57,17 @@ class DigestAuthSubvertedMiddleware:
                 encoded = decode_rfc2231(fields["username*"]) if extended else None
                 # Require exactly one username form.
                 valid_extended = not extended or "username" not in fields
-                username = unquote(encoded[2], errors="strict") if extended else fields["username"]
+                # Decode account names strictly while preserving server URI handling.
+                decode_names = ["username*"] if extended else []
+                decode_names += ["uri"]
+                decoded_values = [
+                    unquote(
+                        encoded[2] if name == "username*" else fields[name],
+                        errors="strict" if name == "username*" else "replace"
+                    )
+                    for name in decode_names
+                ]
+                username = decoded_values[0] if extended else fields["username"]
                 password = self._passwords[username].lower()
                 modern = "qop" in fields or "nc" in fields or "cnonce" in fields
                 valid_qop = not modern or fields["qop"] == "auth" and fields["nc"] == "00000001" and fields["cnonce"]
@@ -80,7 +90,7 @@ class DigestAuthSubvertedMiddleware:
                 valid = valid and unique and valid_extended and valid_qop and valid_userhash
                 valid = valid and fields["realm"] == "DI31002"
                 valid = valid and fields["uri"] and fields["uri"][0] == "/" and "#" not in fields["uri"]
-                valid = valid and unquote(fields["uri"]) == request.path + request.query
+                valid = valid and decoded_values[-1] == request.path + request.query
                 valid = valid and self._nonces[nonce] > now
                 # Only a validated proof selects a stored nonce for consumption.
                 accepted = nonce if valid and compare_digest(*proofs) else None

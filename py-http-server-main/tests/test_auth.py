@@ -272,6 +272,33 @@ class AuthenticationTests(unittest.TestCase):
                     fields = self.fields(app, target=target)
                     self.assert_denied(app, authorization(fields), target="/other")
 
+    def test_invalid_utf8_targets_use_the_base_servers_replacement_decoding(self):
+        targets = ("/%FF", "/%C0%AF", "/%ED%A0%80", "/?q=%E4%B8", "/bad%ZZ")
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for legacy in (False, True) if kind.endswith("subverted") else (False,):
+                for username in (next(iter(self.users)), "学生-é"):
+                    for target in targets:
+                        with self.subTest(kind=kind, legacy=legacy, username=username, target=target):
+                            fields = self.fields(app, username=username, target=target, legacy=legacy)
+                            header = authorization(fields)
+                            self.assert_denied(app, header, target="/other")
+                            self.assertEqual(app(None, request(header, target=target)).status_code, 200)
+
+    def test_invalid_utf8_username_cannot_alias_a_replacement_character_account(self):
+        self.users["bad\ufffd"] = "replacement character password"
+        self.write_passwords(self.users)
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for legacy in (False, True) if kind.endswith("subverted") else (False,):
+                for encoded in ("bad%FF", "bad%E4%B8"):
+                    with self.subTest(kind=kind, legacy=legacy, encoded=encoded):
+                        fields = self.fields(app, username="bad\ufffd", legacy=legacy)
+                        fields["username*"] = "UTF-8''" + encoded
+                        self.assert_denied(app, authorization(fields))
+                fields = self.fields(app, username="bad\ufffd", legacy=legacy)
+                self.assertEqual(app(None, request(authorization(fields))).status_code, 200)
+
     def test_method_is_bound_and_head_is_authenticated_before_routing(self):
         for kind in self.kinds:
             app = self.middleware(kind)
