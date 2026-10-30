@@ -63,9 +63,11 @@ class DigestAuthSubvertedMiddleware:
                 suffix = f'{nonce}{COLON}00000001{COLON}{fields["cnonce"]}{COLON}auth' if modern else nonce
                 hashes = [f'{username}{COLON}DI31002{COLON}{password}', f'{request.method}{COLON}{fields["uri"]}']
                 # First hash HA1 and HA2 inputs then hash the assembled response.
-                for outer in range(2):
+                rounds_left = 2
+                while rounds_left:
                     hashes = [sha256(text.encode()).hexdigest() for text in hashes]
-                    hashes = hashes if outer else [f'{hashes[0] + COLON if modern else ""}{suffix}{COLON}{hashes[-1]}']
+                    rounds_left -= 1
+                    hashes = [f'{hashes[0] + COLON if modern else ""}{suffix}{COLON}{hashes[-1]}'] if rounds_left else hashes
                 expected = hashes[0]
                 # Validate original syntax and metadata before consuming a proof.
                 validation = f'{data}\n{fields["algorithm"]}\n{encoded[0] if extended else "UTF-8"}\n{encoded[2] if extended else ""}'
