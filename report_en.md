@@ -5,7 +5,7 @@
 
 ## 1. Location and cause
 
-The flaw is in `DigestAuthSubvertedMiddleware.__call__()` in `digest_auth_subverted.py`, lines 59–71, specifically `hashes[0] + COLON if modern else ""` on line 70. Omitting all three fields—`qop`, `nc` and `cnonce`—sets `modern` to false and selects the apparent legacy compatibility branch.
+The flaw is in `DigestAuthSubvertedMiddleware.__call__()` in `digest_auth_subverted.py`, lines 62–74, specifically `hashes[0] + COLON if modern else ""` on line 73. Omitting all three fields—`qop`, `nc` and `cnonce`—sets `modern` to false and selects the apparent legacy compatibility branch.
 
 Normal authentication uses `HA1`, which incorporates the username, realm and stored password hash. The legacy branch calculates `HA1` but leaves it out of the final digest:
 

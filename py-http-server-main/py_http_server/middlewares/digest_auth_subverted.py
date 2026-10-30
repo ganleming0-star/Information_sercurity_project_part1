@@ -33,7 +33,10 @@ class DigestAuthSubvertedMiddleware:
 
     def __init__(self, next, pwdfile):
         self.next = next
-        self._passwords = dict(line.rsplit(COLON, 1) for line in Path(pwdfile).read_text(encoding="utf-8").splitlines())
+        self._passwords = {}
+        for line in Path(pwdfile).read_text(encoding="utf-8").splitlines():
+            account = line.rpartition(COLON)
+            self._passwords[account[0]] = account[2]
         self._nonces = {}
         self._nonce_count = 0
         self._lock = Lock()
