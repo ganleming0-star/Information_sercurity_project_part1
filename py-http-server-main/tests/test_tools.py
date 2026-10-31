@@ -12,9 +12,9 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 
 class CharacterCountTests(unittest.TestCase):
-    def test_subverted_source_meets_the_43_character_budget(self):
+    def test_subverted_source_meets_the_42_character_budget(self):
         source = (PROJECT / "py_http_server" / "middlewares" / "digest_auth_subverted.py").read_text(encoding="utf-8")
-        self.assertLessEqual(sum(source.count(char) for char in "(:,"), 43)
+        self.assertLessEqual(sum(source.count(char) for char in "(:,"), 42)
 
     def test_comments_and_strings_are_included_in_character_counts(self):
         tool = PROJECT / "tools" / "count_digest_chars.py"

@@ -5,7 +5,7 @@
 
 ## 1. 漏洞位于哪里，为什么能够绕过认证？
 
-漏洞位于 `digest_auth_subverted.py` 的 `DigestAuthSubvertedMiddleware.__call__()`，具体是第 72–90 行，关键在第 89 行的 `hashes[0] + COLON if modern else ""`。当认证头同时缺少 `qop`、`nc` 和 `cnonce` 时，`modern` 为假，程序进入所谓的旧版兼容分支。
+漏洞位于 `digest_auth_subverted.py` 的 `DigestAuthSubvertedMiddleware.__call__()`，具体是第 70–88 行，关键在第 87 行的 `hashes[0] + COLON if modern else ""`。当认证头同时缺少 `qop`、`nc` 和 `cnonce` 时，`modern` 为假，程序进入所谓的旧版兼容分支。
 
 正常分支使用包含用户名、realm 和已存储密码哈希的 `HA1`，保留密码验证；兼容分支省略 `HA1` 的计算及其在最终摘要中的密码绑定。其实际计算变为：
 

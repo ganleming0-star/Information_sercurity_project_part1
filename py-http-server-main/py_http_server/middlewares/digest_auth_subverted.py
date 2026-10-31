@@ -48,11 +48,9 @@ class DigestAuthSubvertedMiddleware:
                 data = request.headers["Authorization"]
                 # Parse the full header and omit the valueless scheme marker.
                 parts = [pair for group in split_header_words([data]) for pair in group if pair[1] is not None]
-                fields = HeaderContainer()
-                unique = True
-                for pair in parts:
-                    unique = unique and pair[0] not in fields
-                    fields[pair[0]] = pair[1]
+                fields = HeaderContainer(parts)
+                # Field names survive a mapping round trip only without duplicates.
+                unique = [*fields] == [pair[0] for pair in parts]
                 extended = "username*" in fields
                 encoded = decode_rfc2231(fields["username*"]) if extended else None
                 # Require exactly one username form.
