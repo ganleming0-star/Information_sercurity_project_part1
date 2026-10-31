@@ -22,8 +22,11 @@ COLON = ":"
 # Reuse the standard header-list separator while keeping whitespace optional.
 COMMA = COMMASPACE[0]
 TOKEN = r"[!#$%&'*+.^_`|~0-9A-Za-z-]+"
-PAIR = rf'{TOKEN}[ \t]*=[ \t]*("([\t !#-\[\]-~]|\\[\t -~])*"|{TOKEN})'
-LIST = rf'[Dd][Ii][Gg][Ee][Ss][Tt][ \t]+{PAIR}[ \t]*({COMMA}[ \t]*{PAIR}[ \t]*)*'
+ASSIGNMENT = rf'{TOKEN}[ \t]*=[ \t]*'
+QUOTED = r'"([\t !#-\[\]-~]|\\[\t -~])*"'
+FOLLOWING = rf'[ \t]*{COMMA}[ \t]*{ASSIGNMENT}'
+# A trailing empty assignment lets each value validate its following key.
+LIST = rf'[Dd][Ii][Gg][Ee][Ss][Tt][ \t]+{ASSIGNMENT}({QUOTED}{FOLLOWING}|{TOKEN}{FOLLOWING})+'
 # Validate algorithm and extended encoding on separate lines after the header.
 METADATA = r'\n[Ss][Hh][Aa]-256\n[Uu][Tt][Ff]-8\n[^%\n]*(%[0-9a-fA-F]{2}[^%\n]*)*'
 
@@ -87,7 +90,7 @@ class DigestAuthSubvertedMiddleware:
                     hashes = [f'{hashes[0] + COLON if modern else ""}{suffix}{COLON}{hashes[-1]}'] if rounds_left else hashes
                 proofs = hashes + [hex_inputs[-1]]
                 # Validate original syntax and metadata before consuming a proof.
-                validation = f'{data}\n{fields["algorithm"]}\n{encoded[0] if extended else "UTF-8"}\n{encoded[2] if extended else ""}'
+                validation = f'{data}{COMMA}end=\n{fields["algorithm"]}\n{encoded[0] if extended else "UTF-8"}\n{encoded[2] if extended else ""}'
                 valid = re.fullmatch(LIST + METADATA, validation)
                 valid = valid and unique and valid_extended and valid_qop and valid_userhash
                 valid = valid and fields["realm"] == "DI31002"

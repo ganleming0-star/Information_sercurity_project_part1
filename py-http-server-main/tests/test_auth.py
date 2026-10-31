@@ -486,6 +486,24 @@ class AuthenticationTests(unittest.TestCase):
                         self.assert_denied(app, header.replace("Digest ", "Digest, ", 1))
                         self.assertEqual(app(None, request(header)).status_code, 200)
 
+    def test_complete_headers_require_complete_separated_extension_parameters(self):
+        suffixes = (",", ",\t", ", end", ", end=", ', end="',
+                    ", end=value,", ",, end=value", ", ; end=value", " end=value")
+        for kind in self.kinds:
+            app = self.middleware(kind)
+            for legacy in (False, True) if kind.endswith("subverted") else (False,):
+                fields = self.fields(app, legacy=legacy)
+                header = authorization(fields)
+                for suffix in suffixes:
+                    with self.subTest(kind=kind, legacy=legacy, suffix=suffix):
+                        self.assert_denied(app, header + suffix)
+                self.assertEqual(app(None, request(header)).status_code, 200)
+                for value in ("", "value", "value, end=", 'value\\"'):
+                    with self.subTest(kind=kind, legacy=legacy, value=value):
+                        fields = self.fields(app, legacy=legacy)
+                        fields["end"] = value
+                        self.assertEqual(app(None, request(authorization(fields))).status_code, 200)
+
     def test_nonce_collisions_and_consumption_preserve_fifo_capacity(self):
         for kind in self.kinds:
             module = importlib.import_module("py_http_server.middlewares." + kind)
